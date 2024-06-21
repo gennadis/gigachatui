@@ -14,23 +14,24 @@ import (
 	"github.com/joho/godotenv"
 )
 
-type GigaChatClient struct {
-	config config.Config
-	token  client.Token
-}
-
 func main() {
 	ctx := context.Background()
 	godotenv.Load(".env")
 	clientID := os.Getenv("CLIENT_ID")
 	clientSecret := os.Getenv("CLIENT_SECRET")
 
-	cfg := config.NewConfig(clientID, clientSecret)
+	cfg := config.NewConfig()
 
-	gigaChatClient, err := client.NewClient(*cfg)
+	gigaChatClient, err := client.NewClient(ctx, clientID, clientSecret, *cfg)
 	if err != nil {
 		log.Fatalf("Failed to create API Client: %s", err)
 	}
+
+	wg := gigaChatClient.AuthHandler.Run(ctx)
+	go func() {
+		defer close(gigaChatClient.AuthHandler.ErrorChan)
+		wg.Wait()
+	}()
 
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print("Ask a question: ")

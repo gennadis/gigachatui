@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gennadis/gigachatui/internal/auth"
 	"github.com/gennadis/gigachatui/internal/config"
 )
 
@@ -24,24 +25,23 @@ type ApiErrorResponse struct {
 }
 
 type Client struct {
-	HttpClient *http.Client
-	Config     *config.Config
-	Token      Token
+	httpClient  *http.Client
+	Config      *config.Config
+	AuthHandler *auth.AuthenticationHandler
 }
 
-func NewClient(cfg config.Config) (*Client, error) {
-	apiClient := &Client{
-		HttpClient: &http.Client{Timeout: time.Second * 10},
-		Config:     &cfg,
-	}
-	accessToken, err := apiClient.getAccessToken()
+func NewClient(ctx context.Context, clientID string, clientSecret string, cfg config.Config) (*Client, error) {
+	authHandler, err := auth.NewAuthenticationHandler(ctx, clientID, clientSecret)
 	if err != nil {
-		slog.Error("Failed to get Access Token", "error", err)
-		return nil, err
+		slog.Error("Failed to init authentication handler", "error", err)
+	}
+	client := &Client{
+		httpClient:  &http.Client{Timeout: time.Second * 10},
+		Config:      &cfg,
+		AuthHandler: authHandler,
 	}
 
-	apiClient.Token = *accessToken
-	return apiClient, nil
+	return client, nil
 }
 
 func (c *Client) GetComplition(ctx context.Context, request *ChatCompletionRequest) (*ChatResponse, error) {
@@ -54,12 +54,12 @@ func (c *Client) GetComplition(ctx context.Context, request *ChatCompletionReque
 		return nil, err
 	}
 
-	authHeader := fmt.Sprintf("Bearer %s", c.Token.AccessToken)
+	authHeader := fmt.Sprintf("Bearer %s", c.AuthHandler.Token.AccessToken)
 	req.Header.Set("Content-Type", JSONContentType)
 	req.Header.Set("Accept", JSONContentType)
 	req.Header.Set("Authorization", authHeader)
 
-	res, err := c.HttpClient.Do(req)
+	res, err := c.httpClient.Do(req)
 	if err != nil {
 		slog.Error("Failed to send request", "error", err)
 		return nil, err
