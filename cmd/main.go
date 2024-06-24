@@ -41,18 +41,10 @@ func main() {
 		return
 	}
 
-	message := client.ChatMessage{Role: client.ChatModelUser, Content: question}
-	request := client.ChatCompletionRequest{
-		Model:             client.Lite,
-		Messages:          []client.ChatMessage{message},
-		Temperature:       1,
-		TopP:              1,
-		N:                 1,
-		MaxTokens:         1000,
-		RepetitionPenalty: 1,
-	}
+	message := client.ChatMessage{Role: client.ChatRoleUser, Content: question}
+	request := client.NewDefaultChatRequest(message)
 
-	resp, err := gigaChatClient.GetComplition(ctx, &request)
+	resp, err := gigaChatClient.GetComplition(ctx, request)
 	if err != nil {
 		slog.Error("Failed to get chat completion", "error", err)
 	}

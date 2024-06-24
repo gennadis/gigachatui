@@ -35,16 +35,14 @@ func NewClient(ctx context.Context, clientID string, clientSecret string, cfg co
 	if err != nil {
 		slog.Error("Failed to init authentication handler", "error", err)
 	}
-	client := &Client{
+	return &Client{
 		httpClient:  &http.Client{Timeout: time.Second * 10},
 		Config:      &cfg,
 		AuthHandler: authHandler,
-	}
-
-	return client, nil
+	}, nil
 }
 
-func (c *Client) GetComplition(ctx context.Context, request *ChatCompletionRequest) (*ChatResponse, error) {
+func (c *Client) GetComplition(ctx context.Context, request *ChatRequest) (*ChatResponse, error) {
 	reqBytes, _ := json.Marshal(request)
 	completionsPath := c.Config.BaseURL + "/chat/completions"
 

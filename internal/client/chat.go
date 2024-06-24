@@ -3,31 +3,52 @@ package client
 type ChatModel string
 
 const (
-	Lite ChatModel = "GigaChat"
-	Pro  ChatModel = "GigaChat-Pro"
+	ChatModelLite ChatModel = "GigaChat"
+	ChatModelPro  ChatModel = "GigaChat-Pro"
 )
 
-type ChatModelRole string
+type ChatRole string
 
 const (
-	System        ChatModelRole = "system"
-	ChatModelUser ChatModelRole = "user"
-	Assistant     ChatModelRole = "assistant"
+	ChatRoleUser      ChatRole = "user"
+	ChatRoleAssistant ChatRole = "assistant"
+	ChatRoleSystem    ChatRole = "system"
 )
 
-type ChatCompletionRequest struct {
-	Model             ChatModel     `json:"model"`
-	Messages          []ChatMessage `json:"messages"`
-	Temperature       float64       `json:"temperature"`
-	TopP              float64       `json:"top_p"`
-	N                 int64         `json:"n"`
-	MaxTokens         int32         `json:"max_tokens"`
-	RepetitionPenalty float64       `json:"repetition_penalty"`
+type ChatRequest struct {
+	Model    ChatModel     `json:"model"`
+	Messages []ChatMessage `json:"messages"`
+	Options  ChatOptions
+}
+
+func NewDefaultChatRequest(message ChatMessage) *ChatRequest {
+	return &ChatRequest{
+		Model:    ChatModelLite,
+		Messages: []ChatMessage{message},
+		Options: ChatOptions{
+			Temperature:       0.87,
+			N:                 1,
+			Stream:            false,
+			MaxTokens:         512,
+			RepetitionPenalty: 1.07,
+			UpdateInterval:    0,
+		},
+	}
 }
 
 type ChatMessage struct {
-	Role    ChatModelRole `json:"role"`
-	Content string        `json:"content"`
+	Role    ChatRole `json:"role"`
+	Content string   `json:"content"`
+}
+
+type ChatOptions struct {
+	Temperature       float64 `json:"temperature"`        // [ 0 .. 2 ] Default: 0.87
+	TopP              float64 `json:"top_p"`              // [ 0 .. 1 ] Default: 0.47
+	N                 int64   `json:"n"`                  // [ 1 .. 4 ] Default: 1
+	Stream            bool    `json:"stream"`             // Default: false
+	MaxTokens         int64   `json:"max_tokens"`         // Default: 512
+	RepetitionPenalty float64 `json:"repetition_penalty"` // Default: 1.07
+	UpdateInterval    float64 `json:"update_interval"`    // Default: 0
 }
 
 type ChatResponse struct {
