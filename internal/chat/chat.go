@@ -1,4 +1,4 @@
-package client
+package chat
 
 type ChatModel string
 
@@ -21,10 +21,10 @@ type ChatRequest struct {
 	Options  ChatOptions
 }
 
-func NewDefaultChatRequest(message ChatMessage) *ChatRequest {
+func NewDefaultChatRequest(messages []ChatMessage) *ChatRequest {
 	return &ChatRequest{
 		Model:    ChatModelLite,
-		Messages: []ChatMessage{message},
+		Messages: messages,
 		Options: ChatOptions{
 			Temperature:       0.87,
 			N:                 1,

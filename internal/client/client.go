@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/gennadis/gigachatui/internal/auth"
+	"github.com/gennadis/gigachatui/internal/chat"
 	"github.com/gennadis/gigachatui/internal/config"
+	"github.com/gennadis/gigachatui/internal/session"
 )
 
 const (
@@ -28,21 +30,24 @@ type Client struct {
 	httpClient  *http.Client
 	Config      *config.Config
 	AuthHandler *auth.AuthenticationHandler
+	Session     *session.Session
 }
 
-func NewClient(ctx context.Context, clientID string, clientSecret string, cfg config.Config) (*Client, error) {
+func NewClient(ctx context.Context, chatName string, clientID string, clientSecret string, cfg config.Config) (*Client, error) {
 	authHandler, err := auth.NewAuthenticationHandler(ctx, clientID, clientSecret)
 	if err != nil {
 		slog.Error("Failed to init authentication handler", "error", err)
 	}
+	newSession := session.NewSession(chatName)
 	return &Client{
 		httpClient:  &http.Client{Timeout: time.Second * 10},
 		Config:      &cfg,
 		AuthHandler: authHandler,
+		Session:     newSession,
 	}, nil
 }
 
-func (c *Client) GetComplition(ctx context.Context, request *ChatRequest) (*ChatResponse, error) {
+func (c *Client) GetCompletion(ctx context.Context, request *chat.ChatRequest) (*chat.ChatResponse, error) {
 	reqBytes, _ := json.Marshal(request)
 	completionsPath := c.Config.BaseURL + "/chat/completions"
 
@@ -75,7 +80,7 @@ func (c *Client) GetComplition(ctx context.Context, request *ChatRequest) (*Chat
 		return nil, err
 	}
 
-	chatResp := ChatResponse{}
+	chatResp := chat.ChatResponse{}
 	if err := json.Unmarshal(body, &chatResp); err != nil {
 		slog.Error("Failed to unmarshal chat response body", "error", err)
 		return nil, err
