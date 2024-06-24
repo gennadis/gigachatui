@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gennadis/gigachatui/internal/chat"
 	"github.com/gennadis/gigachatui/internal/client"
 	"github.com/gennadis/gigachatui/internal/config"
 	"github.com/joho/godotenv"
@@ -43,14 +42,11 @@ func main() {
 
 	for {
 		question := promptUser("Ask a question: ")
-		assistantResponse, err := handleQuestion(ctx, gigaChatClient, question)
+		assistantResponse, err := gigaChatClient.GetCompletion(ctx, question)
 		if err != nil {
 			log.Printf("Error handling question: %v", err)
 		}
-		gigaChatClient.Session.Messages = append(gigaChatClient.Session.Messages, chat.ChatMessage{Role: chat.ChatRoleAssistant, Content: assistantResponse})
-
 		fmt.Println(assistantResponse)
-		fmt.Println(len(gigaChatClient.Session.Messages))
 	}
 }
 
@@ -62,18 +58,4 @@ func promptUser(prompt string) string {
 		log.Fatalf("Error reading input: %v", err)
 	}
 	return strings.TrimSuffix(input, "\n")
-}
-
-func handleQuestion(ctx context.Context, client *client.Client, question string) (string, error) {
-	userMessage := chat.ChatMessage{Role: chat.ChatRoleUser, Content: question}
-	client.Session.Messages = append(client.Session.Messages, userMessage)
-	request := chat.NewDefaultChatRequest(client.Session.Messages)
-
-	resp, err := client.GetCompletion(ctx, request)
-	if err != nil {
-		return "", fmt.Errorf("Failed to get chat completion: %w", err)
-	}
-
-	return resp.Choices[0].Message.Content, nil
-
 }

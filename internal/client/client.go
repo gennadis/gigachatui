@@ -47,11 +47,11 @@ func NewClient(ctx context.Context, chatName string, clientID string, clientSecr
 	}, nil
 }
 
-func (c *Client) GetCompletion(ctx context.Context, request *chat.ChatRequest) (*chat.ChatResponse, error) {
+func (c *Client) callCompletionsAPI(ctx context.Context, request *chat.ChatRequest) (*chat.ChatResponse, error) {
 	reqBytes, _ := json.Marshal(request)
 	completionsPath := c.Config.BaseURL + "/chat/completions"
 
-	req, err := http.NewRequest("POST", completionsPath, bytes.NewBuffer(reqBytes))
+	req, err := http.NewRequestWithContext(ctx, "POST", completionsPath, bytes.NewBuffer(reqBytes))
 	if err != nil {
 		slog.Error("Failed to build send request", "error", err)
 		return nil, err
@@ -87,6 +87,26 @@ func (c *Client) GetCompletion(ctx context.Context, request *chat.ChatRequest) (
 	}
 
 	return &chatResp, nil
+}
+
+func (c *Client) GetCompletion(ctx context.Context, question string) (string, error) {
+	userMsg := chat.ChatMessage{Role: chat.ChatRoleUser, Content: question}
+	c.Session.Messages = append(c.Session.Messages, userMsg)
+	request := chat.NewDefaultChatRequest(c.Session.Messages)
+
+	resp, err := c.callCompletionsAPI(ctx, request)
+	if err != nil {
+		return "", fmt.Errorf("Failed to get chat completion: %w", err)
+	}
+
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("No completion choices was provided by API")
+	}
+
+	respTxt := resp.Choices[0].Message.Content
+	c.Session.Messages = append(c.Session.Messages, chat.ChatMessage{Role: chat.ChatRoleAssistant, Content: respTxt})
+
+	return respTxt, nil
 }
 
 func handleApiError(res *http.Response, body []byte) error {

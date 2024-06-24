@@ -1,5 +1,16 @@
 package chat
 
+// https://developers.sber.ru/docs/ru/gigachat/api/reference/rest/post-chat#zapros
+const (
+	defaultTemperature       = 0.87  // [ 0 .. 2 ] Default: 0.87
+	defaultTopP              = 0.47  // [ 0 .. 1 ] Default: 0.47
+	defaultN                 = 1     // [ 1 .. 4 ] Default: 1
+	defaultStream            = false // Default: false
+	defaultMaxTokens         = 512   // Default: 1024
+	defaultRepetitionPenalty = 1.07  // Default: N/A
+	defaultUpdateInterval    = 0     // in seconds
+)
+
 type ChatModel string
 
 const (
@@ -26,12 +37,12 @@ func NewDefaultChatRequest(messages []ChatMessage) *ChatRequest {
 		Model:    ChatModelLite,
 		Messages: messages,
 		Options: ChatOptions{
-			Temperature:       0.87,
-			N:                 1,
-			Stream:            false,
-			MaxTokens:         512,
-			RepetitionPenalty: 1.07,
-			UpdateInterval:    0,
+			Temperature:       defaultTemperature,
+			N:                 defaultN,
+			Stream:            defaultStream,
+			MaxTokens:         defaultMaxTokens,
+			RepetitionPenalty: defaultRepetitionPenalty,
+			UpdateInterval:    defaultUpdateInterval,
 		},
 	}
 }
@@ -42,13 +53,13 @@ type ChatMessage struct {
 }
 
 type ChatOptions struct {
-	Temperature       float64 `json:"temperature"`        // [ 0 .. 2 ] Default: 0.87
-	TopP              float64 `json:"top_p"`              // [ 0 .. 1 ] Default: 0.47
-	N                 int64   `json:"n"`                  // [ 1 .. 4 ] Default: 1
-	Stream            bool    `json:"stream"`             // Default: false
-	MaxTokens         int64   `json:"max_tokens"`         // Default: 512
-	RepetitionPenalty float64 `json:"repetition_penalty"` // Default: 1.07
-	UpdateInterval    float64 `json:"update_interval"`    // Default: 0
+	Temperature       float64 `json:"temperature"`
+	TopP              float64 `json:"top_p"`
+	N                 int64   `json:"n"`
+	Stream            bool    `json:"stream"`
+	MaxTokens         int64   `json:"max_tokens"`
+	RepetitionPenalty float64 `json:"repetition_penalty"`
+	UpdateInterval    float64 `json:"update_interval"`
 }
 
 type ChatResponse struct {
