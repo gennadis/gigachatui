@@ -41,21 +41,21 @@ func main() {
 	}()
 
 	for {
-		question := promptUser("Ask a question: ")
-		assistantResponse, err := gigaChatClient.GetCompletion(ctx, question)
+		question := promptUser("\nAsk a question: ")
+		err := gigaChatClient.GetCompletion(ctx, question)
 		if err != nil {
 			log.Printf("Error handling question: %v", err)
 		}
-		fmt.Println(assistantResponse)
+
 	}
 }
 
 func promptUser(prompt string) string {
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Println(prompt)
+	fmt.Print(prompt)
 	input, err := reader.ReadString('\n')
 	if err != nil {
 		log.Fatalf("Error reading input: %v", err)
 	}
-	return strings.TrimSuffix(input, "\n")
+	return strings.TrimSpace(input)
 }

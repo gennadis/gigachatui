@@ -2,13 +2,13 @@ package chat
 
 // https://developers.sber.ru/docs/ru/gigachat/api/reference/rest/post-chat#zapros
 const (
-	defaultTemperature       = 0.87  // [ 0 .. 2 ] Default: 0.87
-	defaultTopP              = 0.47  // [ 0 .. 1 ] Default: 0.47
-	defaultN                 = 1     // [ 1 .. 4 ] Default: 1
-	defaultStream            = false // Default: false
-	defaultMaxTokens         = 512   // Default: 1024
-	defaultRepetitionPenalty = 1.07  // Default: N/A
-	defaultUpdateInterval    = 0     // in seconds
+	defaultTemperature       = 0.87 // [ 0 .. 2 ] Default: 0.87
+	defaultTopP              = 0.47 // [ 0 .. 1 ] Default: 0.47
+	defaultN                 = 1    // [ 1 .. 4 ] Default: 1
+	defaultStream            = true // Default: false
+	defaultMaxTokens         = 1024 // Default: 1024
+	defaultRepetitionPenalty = 1.07 // Default: N/A
+	defaultUpdateInterval    = 0.1  // in seconds
 )
 
 type ChatModel string
@@ -29,14 +29,14 @@ const (
 type ChatRequest struct {
 	Model    ChatModel     `json:"model"`
 	Messages []ChatMessage `json:"messages"`
-	Options  ChatOptions
+	ChatOptions
 }
 
 func NewDefaultChatRequest(messages []ChatMessage) *ChatRequest {
 	return &ChatRequest{
 		Model:    ChatModelLite,
 		Messages: messages,
-		Options: ChatOptions{
+		ChatOptions: ChatOptions{
 			Temperature:       defaultTemperature,
 			N:                 defaultN,
 			Stream:            defaultStream,
@@ -48,8 +48,8 @@ func NewDefaultChatRequest(messages []ChatMessage) *ChatRequest {
 }
 
 type ChatMessage struct {
-	Role    ChatRole `json:"role"`
 	Content string   `json:"content"`
+	Role    ChatRole `json:"role"`
 }
 
 type ChatOptions struct {
@@ -62,22 +62,22 @@ type ChatOptions struct {
 	UpdateInterval    float64 `json:"update_interval"`
 }
 
-type ChatResponse struct {
-	Choices []ChatResponseChoice `json:"choices"`
-	Created int64                `json:"created"`
-	Model   ChatModel            `json:"model"`
-	Usage   ChatResponseUsage    `json:"usage"`
-	Object  string               `json:"object"`
-}
-
-type ChatResponseChoice struct {
-	Index        int         `json:"index"`
-	Message      ChatMessage `json:"message"`
-	FinishReason string      `json:"finish_reason"`
-}
-
 type ChatResponseUsage struct {
 	PromptTokens     int32 `json:"prompt_tokens"`
 	CompletionTokens int32 `json:"completion_tokens"`
 	TotalTokens      int32 `json:"total_tokens"`
+}
+
+type ChatResponseChoice struct {
+	Delta ChatMessage `json:"delta"`
+	Index int32       `json:"index"`
+}
+
+type ChatResponseStreamChunk struct {
+	Choices []ChatResponseChoice `json:"choices"`
+	Created int64                `json:"created"`
+	Model   ChatModel            `json:"model"`
+	Object  string               `json:"object"`
+	Usage   ChatResponseUsage    `json:"usage"`
+	Final   bool
 }
