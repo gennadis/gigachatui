@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -19,55 +18,58 @@ import (
 )
 
 const (
-	streamResponseChunkStartLine = "data: "
-	streamResponseFinalLine      = "data: [DONE]"
-	JSONContentType              = "application/json"
+	streamRespChunkStartLine = "data: "
+	streamRespFinalLine      = "data: [DONE]"
+	contentTypeJSON          = "application/json"
 )
 
+// Client represents a client for interacting with the GigaChat API
 type Client struct {
-	httpClient         *http.Client
-	Config             *config.Config
-	AuthHandler        *auth.AuthenticationHandler
-	Session            *session.Session
-	StreamResponseChan chan chat.ChatResponseStreamChunk
-	ErrorChan          chan error
+	httpClient     *http.Client
+	Config         *config.Config
+	AuthManager    *auth.Manager
+	Session        *session.Session
+	StreamRespChan chan chat.ResponseStreamChunk
+	ErrorChan      chan error
 }
 
-func NewClient(ctx context.Context, chatName string, clientID string, clientSecret string, cfg config.Config) (*Client, error) {
-	authHandler, err := auth.NewAuthenticationHandler(ctx, clientID, clientSecret)
+// NewClient initializes a new Client instance
+func NewClient(ctx context.Context, cfg config.Config, chatName, clientID, clientSecret string) (*Client, error) {
+	m, err := auth.NewManager(ctx, clientID, clientSecret)
 	if err != nil {
-		slog.Error("Failed to init authentication handler", "error", err)
+		return nil, fmt.Errorf("failed to init authentication manager: %w", err)
 	}
-	newSession := session.NewSession(chatName)
+
+	s := session.NewSession(chatName)
 	return &Client{
-		httpClient:         &http.Client{Timeout: time.Second * 10},
-		Config:             &cfg,
-		AuthHandler:        authHandler,
-		Session:            newSession,
-		StreamResponseChan: make(chan chat.ChatResponseStreamChunk),
-		ErrorChan:          make(chan error),
+		httpClient:     &http.Client{Timeout: time.Second * 10},
+		Config:         &cfg,
+		AuthManager:    m,
+		Session:        s,
+		StreamRespChan: make(chan chat.ResponseStreamChunk),
+		ErrorChan:      make(chan error),
 	}, nil
 }
 
+// GetCompletion sends a question to the chat API and processes the response
 func (c *Client) GetCompletion(ctx context.Context, question string) error {
-	userMsg := chat.ChatMessage{Role: chat.ChatRoleUser, Content: question}
+	userMsg := chat.Message{Role: chat.RoleUser, Content: question}
 	c.Session.Messages = append(c.Session.Messages, userMsg)
-	request := chat.NewDefaultChatRequest(c.Session.Messages)
+	request := chat.NewDefaultRequest(c.Session.Messages)
 
 	resp, err := c.callCompletionsAPI(ctx, request)
 	if err != nil {
-		return fmt.Errorf("Failed to get chat completion: %w", err)
+		return fmt.Errorf("failed to get chat completion: %w", err)
 	}
 
 	go c.processCompletionsAPIResponse(resp)
 
 	var assistantRespTxt strings.Builder
-
 	for {
 		select {
-		case chunk := <-c.StreamResponseChan:
+		case chunk := <-c.StreamRespChan:
 			if chunk.Final {
-				assistantRespMsg := chat.ChatMessage{Role: chat.ChatRoleAssistant, Content: assistantRespTxt.String()}
+				assistantRespMsg := chat.Message{Role: chat.RoleAssistant, Content: assistantRespTxt.String()}
 				c.Session.Messages = append(c.Session.Messages, assistantRespMsg)
 				return nil
 			}
@@ -76,77 +78,73 @@ func (c *Client) GetCompletion(ctx context.Context, question string) error {
 			fmt.Print(chunkContent)
 
 		case err := <-c.ErrorChan:
-			slog.Error("Failed to process completions response stream", "error", err)
-			return err
+			return fmt.Errorf("failed to process completions response stream: %w", err)
 		}
 	}
 }
 
-func (c *Client) callCompletionsAPI(ctx context.Context, request *chat.ChatRequest) (*http.Response, error) {
-	reqBytes, _ := json.Marshal(request)
-	completionsPath := c.Config.BaseURL + "/chat/completions"
-
-	req, err := http.NewRequestWithContext(ctx, "POST", completionsPath, bytes.NewBuffer(reqBytes))
+// callCompletionsAPI sends a request to the chat completions API
+func (c *Client) callCompletionsAPI(ctx context.Context, request *chat.Request) (*http.Response, error) {
+	reqBytes, err := json.Marshal(request)
 	if err != nil {
-		slog.Error("Failed to build completion API request", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal chat request: %w", err)
 	}
 
-	authHeader := fmt.Sprintf("Bearer %s", c.AuthHandler.Token.AccessToken)
-	req.Header.Set("Content-Type", JSONContentType)
-	req.Header.Set("Accept", JSONContentType)
+	completionsPath := c.Config.BaseURL + "/chat/completions"
+	req, err := http.NewRequestWithContext(ctx, "POST", completionsPath, bytes.NewBuffer(reqBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to build completion API request: %w", err)
+	}
+
+	authHeader := fmt.Sprintf("Bearer %s", c.AuthManager.Token.AccessToken)
+	req.Header.Set("Content-Type", contentTypeJSON)
+	req.Header.Set("Accept", contentTypeJSON)
 	req.Header.Set("Authorization", authHeader)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		slog.Error("Failed to send request", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to send completion request: %w", err)
 	}
 
 	return resp, nil
 }
 
-func (c *Client) processCompletionsAPIResponse(resp *http.Response) {
-	defer resp.Body.Close()
+// processCompletionsAPIResponse processes the response from the chat completions API
+func (c *Client) processCompletionsAPIResponse(r *http.Response) {
+	defer r.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, err := io.ReadAll(resp.Body)
+	if r.StatusCode != http.StatusOK {
+		bodyBytes, err := io.ReadAll(r.Body)
 		if err != nil {
-			slog.Error("Failed to read completion stream response body", "error", err)
-			c.ErrorChan <- err
+			c.ErrorChan <- fmt.Errorf("failed to read completion stream response body: %w", err)
 			return
 		}
-		slog.Error("Failed to process API request response", "response_body", string(bodyBytes))
-		c.ErrorChan <- fmt.Errorf(string(bodyBytes))
+		c.ErrorChan <- fmt.Errorf("failed to process API response with body: %s: %w", string(bodyBytes), err)
 		return
 	}
 
-	scanner := bufio.NewScanner(resp.Body)
-	for scanner.Scan() {
-		ln := scanner.Text()
-		// fmt.Println("Received line:", ln) // Debugging line to see the raw response
-
-		if ln == streamResponseFinalLine {
-			finalRespChunk := chat.ChatResponseStreamChunk{Final: true}
-			c.StreamResponseChan <- finalRespChunk
+	sc := bufio.NewScanner(r.Body)
+	for sc.Scan() {
+		ln := sc.Text()
+		if ln == streamRespFinalLine {
+			finalRespChunk := chat.ResponseStreamChunk{Final: true}
+			c.StreamRespChan <- finalRespChunk
 			return
 		}
 
-		if strings.HasPrefix(ln, streamResponseChunkStartLine) || ln == "\n" {
-			jsonStr := strings.TrimPrefix(ln, streamResponseChunkStartLine)
-			var respChunk chat.ChatResponseStreamChunk
+		if strings.HasPrefix(ln, streamRespChunkStartLine) || ln == "\n" {
+			jsonStr := strings.TrimPrefix(ln, streamRespChunkStartLine)
+			var respChunk chat.ResponseStreamChunk
 			if err := json.Unmarshal([]byte(jsonStr), &respChunk); err != nil {
-				slog.Error("Failed to unmarshal completion stream response chunk", "error", err)
-				c.ErrorChan <- err
+				c.ErrorChan <- fmt.Errorf("failed to unmarshal completion response stream chunk: %w", err)
 				return
 			}
 			respChunk.Final = false
-			c.StreamResponseChan <- respChunk
+			c.StreamRespChan <- respChunk
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		slog.Error("Failed to scan completion stream response chunk", "error", err)
-		c.ErrorChan <- err
+	if err := sc.Err(); err != nil {
+		c.ErrorChan <- fmt.Errorf("failed to scan completion response stream chunk: %w", err)
 	}
 }
