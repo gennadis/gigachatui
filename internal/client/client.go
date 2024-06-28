@@ -73,6 +73,11 @@ func (c *Client) GetCompletion(ctx context.Context, question string) error {
 				c.Session.Messages = append(c.Session.Messages, assistantRespMsg)
 				return nil
 			}
+
+			if len(chunk.Choices) == 0 {
+				return fmt.Errorf("no choices found in completions API response")
+			}
+
 			chunkContent := chunk.Choices[0].Delta.Content
 			assistantRespTxt.WriteString(chunkContent)
 			fmt.Print(chunkContent)
