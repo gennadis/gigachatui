@@ -1,5 +1,11 @@
 package chat
 
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
 // Default values for chat options. More info can be found here:
 // https://developers.sber.ru/docs/ru/gigachat/api/reference/rest/post-chat#zapros
 const (
@@ -11,6 +17,26 @@ const (
 	defaultRepetitionPenalty = 1.07 // Default: 1.07
 	defaultUpdateInterval    = 0.1  // in seconds
 )
+
+// Message represents a message in the chat
+type Message struct {
+	ID        string    `db:"id" json:"-"`
+	Content   string    `db:"content"`
+	Role      Role      `db:"role"`
+	SessionID string    `db:"session_id" json:"-"`
+	Timestamp time.Time `db:"timestamp" json:"-"`
+}
+
+// NewMessage creates a new Message
+func NewMessage(content string, role Role, sessionID string) *Message {
+	return &Message{
+		ID:        uuid.NewString(),
+		Content:   content,
+		Role:      role,
+		SessionID: sessionID,
+		Timestamp: time.Now(),
+	}
+}
 
 // Model represents the model type for the chat
 type Model string
@@ -55,12 +81,6 @@ func NewDefaultRequest(messages []Message) *Request {
 			UpdateInterval:    defaultUpdateInterval,
 		},
 	}
-}
-
-// Message represents a message in the chat
-type Message struct {
-	Content string `json:"content"`
-	Role    Role   `json:"role"`
 }
 
 // Options represents the options for a chat request

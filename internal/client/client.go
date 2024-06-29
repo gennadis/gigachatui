@@ -14,7 +14,7 @@ import (
 	"github.com/gennadis/gigachatui/internal/auth"
 	"github.com/gennadis/gigachatui/internal/chat"
 	"github.com/gennadis/gigachatui/internal/config"
-	"github.com/gennadis/gigachatui/internal/session"
+	"github.com/gennadis/gigachatui/storage"
 )
 
 const (
@@ -25,63 +25,85 @@ const (
 
 // Client represents a client for interacting with the GigaChat API
 type Client struct {
-	httpClient     *http.Client
 	Config         *config.Config
 	AuthManager    *auth.Manager
-	Session        *session.Session
+	SessionStorage *storage.Sessions
+	MessageStorage *storage.Messages
 	StreamRespChan chan chat.ResponseStreamChunk
 	ErrorChan      chan error
+	httpClient     *http.Client
 }
 
 // NewClient initializes a new Client instance
-func NewClient(ctx context.Context, cfg config.Config, chatName, clientID, clientSecret string) (*Client, error) {
+func NewClient(ctx context.Context, cfg config.Config, sessionStorage storage.Sessions, messagesStorage storage.Messages, clientID, clientSecret string) (*Client, error) {
 	m, err := auth.NewManager(ctx, clientID, clientSecret)
 	if err != nil {
 		return nil, fmt.Errorf("failed to init authentication manager: %w", err)
 	}
 
-	s := session.NewSession(chatName)
 	return &Client{
-		httpClient:     &http.Client{Timeout: time.Second * 10},
 		Config:         &cfg,
 		AuthManager:    m,
-		Session:        s,
+		SessionStorage: &sessionStorage,
+		MessageStorage: &messagesStorage,
 		StreamRespChan: make(chan chat.ResponseStreamChunk),
 		ErrorChan:      make(chan error),
+		httpClient:     &http.Client{Timeout: time.Second * 10},
 	}, nil
 }
 
 // GetCompletion sends a question to the chat API and processes the response
-func (c *Client) GetCompletion(ctx context.Context, question string) error {
-	userMsg := chat.Message{Role: chat.RoleUser, Content: question}
-	c.Session.Messages = append(c.Session.Messages, userMsg)
-	request := chat.NewDefaultRequest(c.Session.Messages)
+func (c *Client) GetCompletion(ctx context.Context, sessionID, question string) error {
+	// Create a new message for the user's question and write it to the storage
+	userMsg := chat.NewMessage(question, chat.RoleUser, sessionID)
+	if err := c.MessageStorage.Write(*userMsg); err != nil {
+		return fmt.Errorf("failed to write user message to storage: %w", err)
+	}
 
+	// Read all messages for the given session from storage
+	// This is necessary to provide context to the chat assistant
+	sessionMessages, err := c.MessageStorage.ReadBySessionID(sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to read session messages from storage: %w", err)
+	}
+
+	// Create a request with the session messages to send to the GigaChat API
+	request := chat.NewDefaultRequest(sessionMessages)
 	resp, err := c.callCompletionsAPI(ctx, request)
 	if err != nil {
 		return fmt.Errorf("failed to get chat completion: %w", err)
 	}
 
+	// Process the response from the chat API asynchronously
 	go c.processCompletionsAPIResponse(resp)
 
+	// Buffer to build the assistant's response text incrementally
 	var assistantRespTxt strings.Builder
+
 	for {
 		select {
+		// Handle the streaming response from the completions API
 		case chunk := <-c.StreamRespChan:
+			// If the chunk is marked as final, write the complete response to storage
 			if chunk.Final {
-				assistantRespMsg := chat.Message{Role: chat.RoleAssistant, Content: assistantRespTxt.String()}
-				c.Session.Messages = append(c.Session.Messages, assistantRespMsg)
+				assistantRespMsg := chat.NewMessage(assistantRespTxt.String(), chat.RoleAssistant, sessionID)
+				if err := c.MessageStorage.Write(*assistantRespMsg); err != nil {
+					return fmt.Errorf("failed to write assistant response message to storage: %w", err)
+				}
 				return nil
 			}
 
+			// Ensure there are choices available in the chunk
 			if len(chunk.Choices) == 0 {
 				return fmt.Errorf("no choices found in completions API response")
 			}
 
+			// Append the chunk content to the response text
 			chunkContent := chunk.Choices[0].Delta.Content
 			assistantRespTxt.WriteString(chunkContent)
 			fmt.Print(chunkContent)
 
+		// Handle errors that may occur during the streaming response processing
 		case err := <-c.ErrorChan:
 			return fmt.Errorf("failed to process completions response stream: %w", err)
 		}

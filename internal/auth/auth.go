@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -47,6 +48,8 @@ type Manager struct {
 
 // NewManager creates a new AuthenticationHandler instance
 func NewManager(ctx context.Context, clientID, clientSecret string) (*Manager, error) {
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // #nosec
+
 	m := &Manager{
 		clientID:     clientID,
 		clientSecret: clientSecret,

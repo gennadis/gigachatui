@@ -9,10 +9,14 @@ import (
 	"os"
 	"strings"
 
+	"github.com/gennadis/gigachatui/internal/chat"
 	"github.com/gennadis/gigachatui/internal/client"
 	"github.com/gennadis/gigachatui/internal/config"
+	"github.com/gennadis/gigachatui/storage"
 	"github.com/joho/godotenv"
 )
+
+const databaseFilePath = "./sqlite.db"
 
 func main() {
 	ctx := context.Background()
@@ -35,14 +39,26 @@ func main() {
 		log.Fatalf("failed to create config: %v", err)
 	}
 
-	// Prompt user for chat name
-	chatName, err := promptUser("Enter a chat name: ")
+	// Initialize database
+	dataDB, err := storage.NewSqliteDB(databaseFilePath)
 	if err != nil {
-		log.Fatalf("failed to handle chat name user prompt: %v", err)
+		log.Fatalf("failed to create database file %s: %v", databaseFilePath, err)
+	}
+	slog.Debug("database filepath", "path", databaseFilePath)
+
+	// Make store and load sessions
+	sessionsStore, err := storage.NewSessions(dataDB)
+	if err != nil {
+		log.Fatalf("failed to make sessions store: %v", err)
+	}
+	// Make store and load messages
+	messagesStore, err := storage.NewMessages(dataDB)
+	if err != nil {
+		log.Fatalf("failed to make messages store: %v", err)
 	}
 
 	// Create a new GigaChat client
-	gcc, err := client.NewClient(ctx, *cfg, chatName, clientID, clientSecret)
+	gcc, err := client.NewClient(ctx, *cfg, *sessionsStore, *messagesStore, clientID, clientSecret)
 	if err != nil {
 		log.Fatalf("failed to create GigaChat API client: %v", err)
 	}
@@ -54,6 +70,18 @@ func main() {
 		wg.Wait()
 	}()
 
+	// Prompt user for chat name
+	chatName, err := promptUser("Enter a chat name: ")
+	if err != nil {
+		log.Fatalf("failed to handle chat name user prompt: %v", err)
+	}
+
+	// Create new Session
+	session := chat.NewSession(chatName)
+	if err := gcc.SessionStorage.Write(*session); err != nil {
+		log.Fatalf("failed to write session to storage: %s", err)
+	}
+
 	// Main loop to handle user questions
 	for {
 		userPromt, err := promptUser("\nAsk a question: ")
@@ -61,7 +89,7 @@ func main() {
 			log.Fatalf("failed to handle user question prompt: %v", err)
 		}
 
-		if err := gcc.GetCompletion(ctx, userPromt); err != nil {
+		if err := gcc.GetCompletion(ctx, session.ID, userPromt); err != nil {
 			slog.Error("failed to handle user promt completion", "error", err)
 		}
 	}
@@ -73,7 +101,7 @@ func promptUser(prompt string) (string, error) {
 	fmt.Print(prompt)
 	inp, err := r.ReadString('\n')
 	if err != nil {
-		return "", fmt.Errorf("failed to read user input: %v", err)
+		return "", fmt.Errorf("failed to read user input: %w", err)
 	}
 	return strings.TrimSpace(inp), nil
 }
