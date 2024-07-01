@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/gennadis/gigachatui/internal/auth"
 	"github.com/gennadis/gigachatui/internal/chat"
 	"github.com/gennadis/gigachatui/internal/client"
 	"github.com/gennadis/gigachatui/internal/config"
@@ -57,8 +58,13 @@ func main() {
 		log.Fatalf("failed to make messages store: %v", err)
 	}
 
+	authManager, err := auth.NewManager(ctx, clientID, clientSecret)
+	if err != nil {
+		log.Fatalf("failed to init auth manager: %v", err)
+	}
+
 	// Create a new GigaChat client
-	gcc, err := client.NewClient(ctx, *cfg, *sessionsStore, *messagesStore, clientID, clientSecret)
+	gcc, err := client.NewClient(*cfg, *authManager, *sessionsStore, *messagesStore)
 	if err != nil {
 		log.Fatalf("failed to create GigaChat API client: %v", err)
 	}
@@ -89,7 +95,7 @@ func main() {
 			log.Fatalf("failed to handle user question prompt: %v", err)
 		}
 
-		if err := gcc.GetCompletion(ctx, session.ID, userPromt); err != nil {
+		if err := gcc.RequestCompletion(ctx, session.ID, userPromt); err != nil {
 			slog.Error("failed to handle user promt completion", "error", err)
 		}
 	}

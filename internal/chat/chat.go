@@ -67,8 +67,8 @@ type Request struct {
 	Options
 }
 
-// NewDefaultRequest creates a new Request with default options
-func NewDefaultRequest(messages []Message) *Request {
+// NewRequest creates a new Request with default options
+func NewRequest(messages []Message) *Request {
 	return &Request{
 		Model:    ChatModelLite,
 		Messages: messages,
@@ -94,25 +94,25 @@ type Options struct {
 	UpdateInterval    float64 `json:"update_interval"`
 }
 
-// ResponseUsage represents the usage details of a chat response
-type ResponseUsage struct {
+// Usage represents the usage details of a chat response
+type Usage struct {
 	PromptTokens     int32 `json:"prompt_tokens"`
 	CompletionTokens int32 `json:"completion_tokens"`
 	TotalTokens      int32 `json:"total_tokens"`
 }
 
-// ResponseChoice represents a choice in the chat response
-type ResponseChoice struct {
+// Choice represents a choice in the chat response
+type Choice struct {
 	Delta Message `json:"delta"`
 	Index int32   `json:"index"`
 }
 
-// ResponseStreamChunk represents a chunk of the chat response stream
-type ResponseStreamChunk struct {
-	Choices []ResponseChoice `json:"choices"`
-	Created int64            `json:"created"`
-	Model   Model            `json:"model"`
-	Object  string           `json:"object"`
-	Usage   ResponseUsage    `json:"usage"`
-	Final   bool             `json:"-"`
+// StreamChunk represents a chunk of the chat response stream
+type StreamChunk struct {
+	Choices []Choice `json:"choices"`
+	Created int64    `json:"created"`
+	Model   Model    `json:"model"`
+	Object  string   `json:"object"`
+	Usage   Usage    `json:"usage"`
+	Final   bool     `json:"-"`
 }
